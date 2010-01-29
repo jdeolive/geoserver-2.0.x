@@ -131,7 +131,8 @@
 	
 	<!-- http url mapping -->
 	<bean id="wcsURLMapping" 
-		class="org.springframework.web.servlet.handler.SimpleUrlHandlerMapping">
+		class="org.geoserver.ows.OWSHandlerMapping">
+		<constructor-arg ref="catalog"/>
 		<property name="alwaysUseFullPath" value="true"/>
 		<property name="mappings">
 			<props>
@@ -140,5 +141,9 @@
 			</props>
 		</property>
 	</bean>
+	
+	<bean id="wcsLocalWorkspaceURLManger" class="org.geoserver.ows.LocalWorkspaceURLMangler">
+       <constructor-arg value="wcs"/>
+     </bean>
 	
 </beans>

@@ -5,12 +5,16 @@
 package org.geoserver.data.test;
 
 import java.awt.geom.AffineTransform;
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
+import java.io.InputStreamReader;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -21,6 +25,7 @@ import java.util.Set;
 
 import javax.xml.namespace.QName;
 
+import org.apache.commons.io.FileUtils;
 import org.geoserver.catalog.ProjectionPolicy;
 import org.geoserver.data.CatalogWriter;
 import org.geoserver.data.util.CoverageStoreUtils;
@@ -187,7 +192,12 @@ public class MockData implements TestData {
     public static QName AGGREGATEGEOFEATURE = new QName(SF_URI, "AggregateGeoFeature", SF_PREFIX);
     public static QName GENERICENTITY = new QName(SF_URI, "GenericEntity", SF_PREFIX);
 
-    // WCS 1.1
+    // WCS 1.0
+    public static QName GTOPO_DEM = new QName(CDF_URI, "W020N90", CDF_PREFIX);
+    public static QName USA_WORLDIMG = new QName(CDF_URI, "usa", CDF_PREFIX);
+    public static String DEM = "dem";
+    public static String PNG = "png";
+    // WCS 1.1  
     public static String WCS_PREFIX = "wcs";
     public static String WCS_URI = "http://www.opengis.net/wcs/1.1.1";
     public static QName TASMANIA_DEM = new QName(WCS_URI, "DEM", WCS_PREFIX);
@@ -449,12 +459,37 @@ public class MockData implements TestData {
     
     /**
      * Adds the "well known" coverage types to the data directory.
+     * 
+     * @deprecated use {@link #addWcs11Coverages()}
      */
     public void addWellKnownCoverageTypes() throws Exception {
+        addWcs11Coverages();
+    }
+    
+    /**
+     * Adds the wcs 1.0 coverages.
+     */
+    public void addWcs10Coverages() throws Exception {
         URL style = MockData.class.getResource("raster.sld");
         String styleName = "raster";
         addStyle(styleName, style);
         
+        //wcs 1.0
+        //addCoverage(GTOPO_DEM, TestData.class.getResource("W020N90/W020N90.manifest"),
+        //        "dem", styleName);
+        
+        addCoverage(USA_WORLDIMG, TestData.class.getResource("usa.zip"), null, styleName);
+    }
+    
+    /**
+     * Adds the wcs 1.1 coverages.
+     */
+    public void addWcs11Coverages() throws Exception {
+        URL style = MockData.class.getResource("raster.sld");
+        String styleName = "raster";
+        addStyle(styleName, style);
+        
+        //wcs 1.1
         addCoverage(TASMANIA_DEM, TestData.class.getResource("tazdem.tiff"),
                 TIFF, styleName);
         addCoverage(TASMANIA_BM, TestData.class.getResource("tazbm.tiff"),
@@ -548,19 +583,31 @@ public class MockData implements TestData {
         }
         
         // create the coverage file
-        File f = new File(directory, name.getLocalPart() + "." + extension);
+        File f = new File(directory, name.getLocalPart() + (extension != null ? "." + extension : ""));
+        if (extension == null) {
+            f.mkdir();
+        }
         
         // copy over the contents
-        IOUtils.copy( coverage.openStream(), f );
+        if (!f.isDirectory())
+            IOUtils.copy( coverage.openStream(), f );
+        else {
+            // assuming compressed file
+            final File compressedFile = new File(f, name.getLocalPart() + ".zip");
+            IOUtils.copy( coverage.openStream(), compressedFile );
+            IOUtils.decompress(compressedFile, f);
+            final File srcDir = new File(f, name.getLocalPart());
+            FileUtils.copyDirectory(srcDir, f, true);
+        }
         coverageInfo(name, f, styleName);
-        
+
         // setup the meta information to be written in the catalog 
         AbstractGridFormat format = (AbstractGridFormat) GridFormatFinder.findFormat(f);
         namespaces.put(name.getPrefix(), name.getNamespaceURI());
         coverageStoresNamespaces.put(name.getLocalPart(), name.getPrefix());
         Map params = new HashMap();
         params.put(CatalogWriter.COVERAGE_TYPE_KEY, format.getName());
-        params.put(CatalogWriter.COVERAGE_URL_KEY, "file:" + name.getPrefix() + "/" + name.getLocalPart() + "." + extension);
+        params.put(CatalogWriter.COVERAGE_URL_KEY, "file:" + name.getPrefix() + "/" + name.getLocalPart() + (extension != null ? "." + extension : ""));
         coverageStores.put(name.getLocalPart(), params);
     }
     
@@ -578,6 +625,17 @@ public class MockData implements TestData {
      */
     public void disableCoverageStore(String datastoreId) {
         disabledCoverageStores.add(datastoreId);
+    }
+    
+    /**
+     * Populates a map with prefix to namespace uri mappings for all the 
+     * mock data namespaces. 
+     */
+    public void registerNamespaces(Map<String,String> namespaces) {
+        namespaces.put(MockData.CITE_PREFIX, MockData.CITE_URI); 
+        namespaces.put(MockData.CDF_PREFIX, MockData.CDF_URI);
+        namespaces.put(MockData.CGF_PREFIX, MockData.CGF_URI);
+        namespaces.put(MockData.SF_PREFIX, MockData.SF_URI);
     }
     
     /**
@@ -692,7 +750,9 @@ public class MockData implements TestData {
         // let's grab the necessary metadata
         AbstractGridFormat format = (AbstractGridFormat) GridFormatFinder.findFormat(coverageFile);
         AbstractGridCoverage2DReader reader = (AbstractGridCoverage2DReader) format.getReader(coverageFile);
-
+        if (reader == null) {
+            throw new RuntimeException("No reader for " + coverageFile.getCanonicalPath() + " with format " + format.getName());
+        }
         // basic info
         FileWriter writer = new FileWriter(info);
         writer.write("<coverage format=\"" + coverage + "\">\n");

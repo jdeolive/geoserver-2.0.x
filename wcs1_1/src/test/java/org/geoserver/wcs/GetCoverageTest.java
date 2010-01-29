@@ -13,6 +13,8 @@ import java.util.Map;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 
+import javax.servlet.ServletResponse;
+
 import junit.framework.Test;
 import junit.textui.TestRunner;
 import net.opengis.wcs11.GetCoverageType;
@@ -407,6 +409,28 @@ public class GetCoverageTest extends WCSTestSupport {
         reader.dispose();
     }
     
+    public void testWorkspaceQualified() throws Exception {
+        String queryString = "&request=getcoverage&service=wcs&version=1.1.1&&format=image/geotiff" +
+            "&BoundingBox=-45,146,-42,147,urn:ogc:def:crs:EPSG:6.6:4326";
+        ServletResponse r = getAsServletResponse(
+            "wcs?identifier="+TASMANIA_BM.getLocalPart()+queryString);
+         assertTrue(r.getContentType().startsWith("multipart/related"));
+
+         Document dom = getAsDOM("cdf/wcs?identifier="+TASMANIA_BM.getLocalPart()+queryString);
+         assertEquals("ows:ExceptionReport", dom.getDocumentElement().getNodeName());
+    }
+
+     public void testLayerQualified() throws Exception {
+         String queryString = "&request=getcoverage&service=wcs&version=1.1.1&&format=image/geotiff" +
+             "&BoundingBox=-45,146,-42,147,urn:ogc:def:crs:EPSG:6.6:4326";
+         ServletResponse r = getAsServletResponse(
+             "wcs/BlueMarble/wcs?identifier=BlueMarble"+queryString);
+         assertTrue(r.getContentType().startsWith("multipart/related"));
+
+         Document dom = getAsDOM("wcs/DEM/wcs?identifier=BlueMarble"+queryString);
+         assertEquals("ows:ExceptionReport", dom.getDocumentElement().getNodeName());
+     }
+
     /**
      * Runs GetCoverage on the specified parameters and returns an array of coverages
      */
